@@ -1,5 +1,4 @@
 import numpy as np
-#from ._computation_graph import ComputationGraph
 
 class Tensor:
 
@@ -8,7 +7,7 @@ class Tensor:
                  shape=None,
                  dtype='float',
                  requires_grad: bool = True,
-                 computation_graph=None): #ComputationGraph = None):
+                 computation_graph=None):
         """
             TODO: implement
             construction options

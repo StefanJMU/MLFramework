@@ -5,7 +5,6 @@ from ._computation_graph import ComputationGraph
 
 """
     TODO: Write an numpy exception wrapping mechanism
-
 """
 
 class Operation(metaclass=ABCMeta):
@@ -13,9 +12,8 @@ class Operation(metaclass=ABCMeta):
     def __init__(self, *args, **kwargs):
         ...
 
-    @abstractmethod
     def check_compatibility(self, operand_1: Tensor, operand_2: Tensor = None):
-        ...
+        return True
 
     @abstractmethod
     def _forward(self, operand_1: Tensor, operand_2: Tensor = None):
@@ -26,11 +24,30 @@ class Operation(metaclass=ABCMeta):
         return self._forward(operand_1, operand_2)
 
     @abstractmethod
-    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None) -> Tensor:
+    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
         ...
 
-    def backward_op_2(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None) -> Tensor:
+    def backward_op_2(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
         return None
+
+    def debroadcast(self, error_signal, shape):
+        """
+            Convention: shape is broadcast to shape of error_signal (possibly by the identity)
+            TODO: this function has to be made more elegant and fast
+        """
+        dims = len(error_signal.shape)
+        for i in range(dims - 1, -1, -1):
+            if i >= len(shape):
+                # Contract the dimension completely
+                error_signal = np.sum(error_signal, axis=i)
+            else:
+                # Contract to previous length in the dimension (detiling)
+                n_blocs = error_signal.shape[i] / shape[i]
+                blocks = np.split(error_signal, n_blocs, axis=i)
+                error_signal = blocks[0]
+                for j in range(1, len(blocks)):
+                    error_signal = error_signal + blocks[j]
+        return error_signal
 
 class MatrixMatrixMul(Operation):
 
@@ -63,40 +80,50 @@ class Sum(Operation):
     def __init__(self, axis: int):
         super().__init__()
         self.axis = axis
-        self.axis_length = 0
 
     def check_compatibility(self, operand_1: Tensor, operand_2: Tensor = None):
         if not len(operand_1.data.shape) > self.axis:
             raise ValueError("TODO")
 
     def _forward(self, operand_1: Tensor, operand_2: Tensor):
-        self.axis_length = operand_1.shape[self.axis]
         return np.sum(operand_1.data, axis=self.axis)
 
     def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None) -> Tensor:
-        tile_descriptor = np.ones((len(error_signal.shape)+1,), dtype=int)
-        tile_descriptor[self.axis] = self.axis_length
-        return np.tile(np.expand_dims(error_signal, self.axis), tile_descriptor)
+        expansion_mask = np.ones_like(operand_1.data)
+        return np.expand_dims(error_signal, self.axis) * expansion_mask
 
 class Mean(Operation):
 
     def __init__(self, axis: int):
         super().__init__()
         self.axis = axis
-        self.axis_length = None
 
     def check_compatibility(self, operand_1: Tensor, operand_2: Tensor = None):
         if not len(operand_1.data.shape) > self.axis:
             raise ValueError("TODO")
 
     def _forward(self, operand_1: Tensor, operand_2: Tensor):
-        self.axis_length = operand_1.shape[self.axis]
         return np.mean(operand_1.data, axis=self.axis)
 
     def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
-        tile_descriptor = np.ones((len(error_signal.shape) + 1,), dtype=int)
-        tile_descriptor[self.axis] = self.axis_length  # that could be handled more elegantly
-        return (1/self.axis_length) * np.tile(np.expand_dims(error_signal, self.axis), tile_descriptor)
+        #tile_descriptor = np.ones((len(error_signal.shape) + 1,), dtype=int)
+        #tile_descriptor[self.axis] = self.axis_length  # that could be handled more elegantly
+        expansion_mask = (1/operand_1.shape[self.axis]) * np.ones_like(operand_1.data)
+        return np.expand_dims(error_signal, self.axis) * expansion_mask
+
+class Prod(Operation):
+
+    def __init__(self, axis: int):
+        super().__init__()
+        self.axis = axis
+
+    def _forward(self, operand_1: Tensor, operand_2: Tensor = None):
+        return np.prod(operand_1.data, axis=self.axis)
+
+    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        axis_product = np.prod(operand_1.data, axis=self.axis, keepdims=True)
+        prop_factor = axis_product * (1 / operand_1.data)
+        return np.expand_dims(error_signal, axis=self.axis) * prop_factor
 
 class Transpose(Operation):
 
@@ -118,47 +145,95 @@ class TensorSum(Operation):
 
     def __init__(self):
         super().__init__()
-        self.res_shape = None
 
     def _forward(self, operand_1: Tensor, operand_2: Tensor = None):
-        res = operand_1.data + operand_2.data
-        self.res_shape = res.shape
+        return operand_1.data + operand_2.data
 
-    def fuse_shapes(self, shape_1, shape_2):
-        """
-            Convention: shape_2 is at least as long as shape_1
-        """
-        if len(shape_1) < len(shape_2):
-            shape = [0] * len(shape_2)
-            for i in range(len(shape_1)):
-                shape[i] = shape[i]
-        else
-
-    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None) -> Tensor:
-        """
-            Attention: Broadcasting effects influence the gradient
-        """
+    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
         if operand_1.shape != error_signal.shape:
-
-
+            return self.debroadcast(error_signal, operand_1.shape)
         return error_signal
 
+    def backward_op_2(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        if operand_2.shape != error_signal.shape:
+            return self.debroadcast(error_signal, operand_2.shape)
+        return error_signal
 
+class TensorProduct(Operation):
+
+    def __init__(self):
+        super().__init__()
+
+    def _forward(self, operand_1: Tensor, operand_2: Tensor = None):
+        return operand_1.data * operand_2.data
+
+    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        op2_data = np.broadcast_to(operand_2.data, error_signal.shape)
+        grad_factor = op2_data * error_signal
+        return self.debroadcast(grad_factor, operand_1.shape)
+
+    def backward_op_2(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        op1_data = np.broadcast_to(operand_1.data, error_signal.shape)
+        grad_factor = op1_data * error_signal
+        return self.debroadcast(grad_factor, operand_2.shape)
+
+class Reshape(Operation):
+
+    def __init__(self, new_shape):
+        super().__init__()
+        self.new_shape = new_shape
+
+    def _forward(self, operand_1: Tensor, operand_2: Tensor = None):
+        return np.reshape(operand_1.data, self.new_shape)
+
+    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        return np.reshape(error_signal, operand_1.shape)
+
+def tsum(tensor_1: Tensor, tensor_2: Tensor):
+    operation = TensorSum()
+    res_data = operation.forward(tensor_1, tensor_2)
+    return Tensor(data=res_data,
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor_1, tensor_2=tensor_2),
+                  requires_grad=(tensor_1.requires_grad or tensor_2.requires_grad))
+
+def tprod(tensor_1: Tensor, tensor_2: Tensor):
+    operation = TensorProduct()
+    res_data = operation.forward(tensor_1, tensor_2)
+    return Tensor(data=res_data,
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor_1, tensor_2=tensor_2),
+                  requires_grad=(tensor_1.requires_grad or tensor_2.requires_grad))
 
 def sum(tensor: Tensor, axis: int):
     operation = Sum(axis)
     res_data = operation.forward(tensor)
     return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor))
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
+                  requires_grad=tensor.requires_grad)
+
+def prod(tensor: Tensor, axis: int):
+    operation = Prod(axis)
+    res_data = operation.forward(tensor)
+    return Tensor(data=res_data,
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
+                  requires_grad=tensor.requires_grad)
 
 def mean(tensor: Tensor, axis: int):
     operation = Mean(axis)
     res_data = operation.forward(tensor)
     return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor))
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
+                  requires_grad=tensor.requires_grad)
 
 def transpose(tensor: Tensor, axis_permutation):
     operation = Transpose(axis_permutation)
     res_data = operation.forward(tensor)
     return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor))
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
+                  requires_grad=tensor.requires_grad)
+
+def reshape(tensor: Tensor, shape: tuple):
+    operation = Reshape(shape)
+    res_data = operation.forward(tensor)
+    return Tensor(data=res_data,
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
+                  requires_grad=tensor.requires_grad)

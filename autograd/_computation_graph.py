@@ -12,7 +12,6 @@ class ComputationGraph:
         self.required_earmark_2 = None if tensor_2 is None else tensor_2.earmark
 
     def backward(self, error_signal: Tensor):
-        # Assumption: if any tensor in the computation history of the tensor requires a grad, so will the tensor itself
         if (self.tensor_1.earmark != self.required_earmark_1
                 or (self.tensor_2 is not None and self.tensor_2.earmark != self.required_earmark_2)):
            raise AttributeError("Tensors have been modified since computation graph establishment.")
