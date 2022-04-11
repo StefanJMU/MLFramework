@@ -106,8 +106,6 @@ class Mean(Operation):
         return np.mean(operand_1.data, axis=self.axis)
 
     def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
-        #tile_descriptor = np.ones((len(error_signal.shape) + 1,), dtype=int)
-        #tile_descriptor[self.axis] = self.axis_length  # that could be handled more elegantly
         expansion_mask = (1/operand_1.shape[self.axis]) * np.ones_like(operand_1.data)
         return np.expand_dims(error_signal, self.axis) * expansion_mask
 
@@ -122,8 +120,64 @@ class Prod(Operation):
 
     def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
         axis_product = np.prod(operand_1.data, axis=self.axis, keepdims=True)
-        prop_factor = axis_product * (1 / operand_1.data)
+        prop_factor = axis_product * np.reciprocal(operand_1.data)
         return np.expand_dims(error_signal, axis=self.axis) * prop_factor
+
+class Square(Operation):
+
+    def __init__(self):
+        super().__init__()
+
+    def _forward(self, operand_1: Tensor, operand_2: Tensor = None):
+        return np.square(operand_1.data)
+
+    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        return error_signal * 2 * operand_1.data
+
+class Power(Operation):
+
+    def __init__(self):
+        super().__init__()
+
+    def _forward(self, operand_1: Tensor, operand_2: Tensor = None):
+        return np.power(operand_1.data, operand_2.data)
+
+    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        gradient = error_signal * operand_2.data * np.power(operand_1.data, operand_2.data - 1)
+        return self.debroadcast(gradient, operand_1.shape)
+
+    def backward_op_2(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        gradient = np.exp(np.log(operand_1.data) * operand_2.data) * np.log(operand_1.data)
+        return self.debroadcast(gradient, operand_2.shape)
+
+class Sqrt(Operation):
+
+    def __init__(self):
+        super().__init__()
+
+    def _forward(self, operand_1: Tensor, operand_2: Tensor = None):
+        return np.sqrt(operand_1.data)
+
+    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        return error_signal * 0.5 * np.power(operand_1.data, -0.5)
+
+class Root(Operation):
+
+    def __init__(self):
+        super().__init__()
+
+    def _forward(self, operand_1: Tensor, operand_2: Tensor = None):
+        return np.power(operand_1.data, np.reciprocal(operand_2.data))
+
+    def backward_op_1(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        op_2_reci = np.reciprocal(operand_2.data)
+        gradient = op_2_reci * np.power(operand_1.data, op_2_reci - 1)
+        return self.debroadcast(gradient, operand_1.shape)
+
+    def backward_op_2(self, error_signal: Tensor, operand_1: Tensor, operand_2: Tensor = None):
+        gradient = -1 * np.exp(np.log(operand_1.data) * np.reciprocal(operand_2.data)) \
+                   * np.log(operand_1.data) * np.reciprocal(np.square(operand_2.data))
+        return self.debroadcast(gradient, operand_2.shape)
 
 class Transpose(Operation):
 
@@ -237,3 +291,32 @@ def reshape(tensor: Tensor, shape: tuple):
     return Tensor(data=res_data,
                   computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
                   requires_grad=tensor.requires_grad)
+
+def square(tensor: Tensor):
+    operation = Square()
+    res_data = operation.forward(tensor)
+    return Tensor(data=res_data,
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
+                  requires_grad=tensor.requires_grad)
+
+def power(tensor_1: Tensor, tensor_2: Tensor):
+    operation = Power()
+    res_data = operation.forward(tensor_1, tensor_2)
+    return Tensor(data=res_data,
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor_1, tensor_2=tensor_2),
+                  requires_grad=(tensor_1.requires_grad or tensor_2.requires_grad))
+
+def sqrt(tensor: Tensor):
+    operation = Sqrt()
+    res_data = operation.forward(tensor)
+    return Tensor(data=res_data,
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
+                  requires_grad=tensor.requires_grad)
+
+def root(tensor_1: Tensor, tensor_2: Tensor):
+    operation = Root()
+    res_data = operation.forward(tensor_1, tensor_2)
+    return Tensor(data=res_data,
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor_1, tensor_2=tensor_2),
+                  requires_grad=(tensor_1.requires_grad or tensor_2.requires_grad))
+
