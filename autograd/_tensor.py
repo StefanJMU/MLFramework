@@ -1,17 +1,28 @@
 import numpy as np
+from ._operation import Slice
+from ._computation_graph import ComputationGraph
 
 class Tensor:
+
+    tensor_code = 0
 
     def __init__(self,
                  data: np.array = None,
                  shape=None,
                  dtype='float',
                  requires_grad: bool = True,
-                 computation_graph=None):
+                 computation_graph=None,
+                 name: str = None):
         """
             TODO: implement
             construction options
         """
+        if name is not None:
+            self.name = name
+        else:
+            self.name = f'#{Tensor.tensor_code}'
+            Tensor.tensor_code += 1
+
         if dtype is None:
             raise ValueError("Cannot construct Tensor of type None")
         if data is not None:
@@ -38,6 +49,9 @@ class Tensor:
         #keeps track of modifications of the underlying data
         self.earmark = 0
 
+    def __getitem__(self, key):
+        return slice(self, key)
+
     def backward(self, error_signal: np.array = None):
         if self.requires_grad:
 
@@ -63,3 +77,17 @@ class Tensor:
     def zero_grad(self):
         self.grad = np.zeros_like(self.grad)
 
+    def __repr__(self):
+        return f'{type(self).__name__}: {self.name} \n' \
+               f'   dtype: {self.data.dtype} \n' \
+               f'   shape: {self.data.shape} \n' \
+               f'   autograd: {self.computation.__repr__()} \n' \
+               f'   data: {self.data}'
+
+
+def slice(tensor, key):
+    operation = Slice(key)
+    res_data = operation.forward(tensor)
+    return Tensor(data=res_data,
+                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
+                  requires_grad=tensor.requires_grad)
