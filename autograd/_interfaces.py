@@ -1,80 +1,63 @@
 from ._operation import *
-from ._computation_graph import ComputationGraph
-from ._tensor import Tensor
+from ._tensor import Tensor, unary_interface, binary_interface
 
+
+@binary_interface
 def tsum(tensor_1: Tensor, tensor_2: Tensor):
     operation = TensorSum()
-    res_data = operation.forward(tensor_1, tensor_2)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor_1, tensor_2=tensor_2),
-                  requires_grad=(tensor_1.requires_grad or tensor_2.requires_grad))
+    return operation.forward(tensor_1, tensor_2), operation
 
+@binary_interface
 def tprod(tensor_1: Tensor, tensor_2: Tensor):
     operation = TensorProduct()
-    res_data = operation.forward(tensor_1, tensor_2)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor_1, tensor_2=tensor_2),
-                  requires_grad=(tensor_1.requires_grad or tensor_2.requires_grad))
+    return operation.forward(tensor_1, tensor_2), operation
 
+@unary_interface
 def sum(tensor: Tensor, axis: int):
     operation = Sum(axis)
-    res_data = operation.forward(tensor)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
-                  requires_grad=tensor.requires_grad)
+    return operation.forward(tensor), operation
 
+@unary_interface
 def prod(tensor: Tensor, axis: int):
     operation = Prod(axis)
-    res_data = operation.forward(tensor)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
-                  requires_grad=tensor.requires_grad)
+    return operation.forward(tensor), operation
 
+@unary_interface
 def mean(tensor: Tensor, axis: int):
     operation = Mean(axis)
-    res_data = operation.forward(tensor)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
-                  requires_grad=tensor.requires_grad)
+    return operation.forward(tensor), operation
 
+@unary_interface
 def transpose(tensor: Tensor, axis_permutation):
     operation = Transpose(axis_permutation)
-    res_data = operation.forward(tensor)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
-                  requires_grad=tensor.requires_grad)
+    return operation.forward(tensor), operation
 
+@unary_interface
 def reshape(tensor: Tensor, shape: tuple):
     operation = Reshape(shape)
-    res_data = operation.forward(tensor)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
-                  requires_grad=tensor.requires_grad)
+    return operation.forward(tensor), operation
 
+@unary_interface
 def square(tensor: Tensor):
     operation = Square()
-    res_data = operation.forward(tensor)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
-                  requires_grad=tensor.requires_grad)
+    return operation.forward(tensor), operation
 
+@binary_interface
 def power(tensor_1: Tensor, tensor_2: Tensor):
     operation = Power()
-    res_data = operation.forward(tensor_1, tensor_2)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor_1, tensor_2=tensor_2),
-                  requires_grad=(tensor_1.requires_grad or tensor_2.requires_grad))
+    return operation.forward(tensor_1, tensor_2), operation
 
+@unary_interface
 def sqrt(tensor: Tensor):
     operation = Sqrt()
-    res_data = operation.forward(tensor)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
-                  requires_grad=tensor.requires_grad)
+    return operation.forward(tensor), operation
 
+@binary_interface
 def root(tensor_1: Tensor, tensor_2: Tensor):
     operation = Root()
-    res_data = operation.forward(tensor_1, tensor_2)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor_1, tensor_2=tensor_2),
-                  requires_grad=(tensor_1.requires_grad or tensor_2.requires_grad))
+    return operation.forward(tensor_1, tensor_2), operation
+
+@binary_interface
+def tdiv(tensor_1: Tensor, tensor_2: Tensor):
+    operation = TensorDiv()
+    return operation.forward(tensor_1, tensor_2), operation

@@ -1,5 +1,5 @@
 import numpy as np
-from autograd import Tensor, sum, mean, tsum, tprod, transpose, prod, power, root
+from autograd import *
 
 data = np.random.rand(10, 5, 5)
 tensor_1 = Tensor(data, name="T0", requires_grad=True)
@@ -14,14 +14,16 @@ data_4 = np.array([[2]], dtype='float')
 tensor_4 = Tensor(data_4, requires_grad=True)
 
 
-res = mean(sum(root(tensor_3, tensor_4), axis=1), axis=0)
-res.backward()
+res = mean(sum(tdiv(tensor_3, tensor_4), axis=1), axis=0)
+
+#res.backward()
 #print(tensor_3.grad)
 #print(tensor_4.grad)
 
+#print(tensor_3)
 tensor_x = mean(tensor_1[:, 1, 1], axis=0)
 tensor_x.backward()
-print(tensor_1.grad)
+print(tensor_x)
 
 #res = tsum(tensor_1, tensor_2)
 #res = mean(sum(prod(res, axis=2), axis=1), axis=0)

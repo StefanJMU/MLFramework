@@ -251,3 +251,21 @@ class Slice(Operation):
         gradient[self.key] = error_signal
         return gradient
 
+class TensorDiv(Operation):
+
+    def __init__(self):
+        super().__init__()
+
+    def _forward(self, operand_1, operand_2=None):
+        return operand_1.data / operand_2.data
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        op_2_data = np.broadcast_to(np.reciprocal(operand_2.data), error_signal.shape)
+        gradient = error_signal * op_2_data
+        return self.debroadcast(gradient, operand_1.shape)
+
+    def backward_op_2(self, error_signal, operand_1, operand_2=None):
+        op_1_data = np.broadcast_to(operand_1.data, error_signal.shape)
+        grad_factor = error_signal * op_1_data
+        gradient = -grad_factor * np.reciprocal(np.square(operand_2.data))
+        return self.debroadcast(gradient, operand_2.shape)

@@ -10,7 +10,7 @@ class Tensor:
                  data: np.array = None,
                  shape=None,
                  dtype='float',
-                 requires_grad: bool = True,
+                 requires_grad: bool = False,
                  computation_graph=None,
                  name: str = None):
         """
@@ -42,6 +42,7 @@ class Tensor:
             raise ValueError("A Tensor requiring gradients can only be of type float")
 
         self.requires_grad = requires_grad
+        self.computation = None
         if self.requires_grad:
             self.grad = np.zeros(self.shape[1:], dtype="float")  #ignore batch-dimension
             self.computation = computation_graph
@@ -78,16 +79,37 @@ class Tensor:
         self.grad = np.zeros_like(self.grad)
 
     def __repr__(self):
+        if self.computation is None:
+            print("asdfasdf")
         return f'{type(self).__name__}: {self.name} \n' \
                f'   dtype: {self.data.dtype} \n' \
                f'   shape: {self.data.shape} \n' \
                f'   autograd: {self.computation.__repr__()} \n' \
                f'   data: {self.data}'
 
+def unary_interface(func):
+    def wrapper(tensor: Tensor, *args, **kwargs):
+        res_data, operation = func(tensor, *args, **kwargs)
+        if tensor.requires_grad:
+            return Tensor(data=res_data,
+                          computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
+                          requires_grad=True)
+        else:
+            return Tensor(data=res_data)
+    return wrapper
 
+def binary_interface(func):
+    def wrapper(tensor_1: Tensor, tensor_2: Tensor, *args, **kwargs):
+        res_data, operation = func(tensor_1, tensor_2, *args, **kwargs)
+        if tensor_1.requires_grad or tensor_2.requires_grad:
+            return Tensor(data=res_data,
+                          computation_graph=ComputationGraph(operation=operation, tensor_1=tensor_1, tensor_2=tensor_2),
+                          requires_grad=True)
+        else:
+            return Tensor(data=res_data)
+    return wrapper
+
+@unary_interface
 def slice(tensor, key):
     operation = Slice(key)
-    res_data = operation.forward(tensor)
-    return Tensor(data=res_data,
-                  computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
-                  requires_grad=tensor.requires_grad)
+    return operation.forward(tensor), operation
