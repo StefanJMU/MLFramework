@@ -269,3 +269,56 @@ class TensorDiv(Operation):
         grad_factor = error_signal * op_1_data
         gradient = -grad_factor * np.reciprocal(np.square(operand_2.data))
         return self.debroadcast(gradient, operand_2.shape)
+
+class Concatenate(Operation):
+
+    def __init__(self, axis: int):
+        super().__init__()
+        self.axis = axis
+
+    def _forward(self, tensor_list, operand_2=None):
+        # operand_1 is a list of Tensors
+        data_list = [tensor.data for tensor in tensor_list]
+        concatenated = np.concatenate(data_list, axis=self.axis)
+        return concatenated
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        # operand_1 of type TensorList
+        sizes = np.array([operand.shape[self.axis] for operand in operand_1.tensors][:-1])
+        split_points = np.cumsum(sizes)
+        return np.split(error_signal, split_points, axis=self.axis)
+
+class Mix(Operation):
+
+    def __init__(self, mask: np.array):
+        super().__init__()
+        self.mask = mask
+
+    def _forward(self, operand_1, operand_2=None):
+        if operand_1.shape[1:] != self.mask.shape:
+            raise ValueError('Mix requires the mask to match the non-batch dimensions of operand_1.'
+                             f'Expected {self.mask.shape}. Got {operand_1.shape[1:]}')
+        # TODO: a check for the mask and operand_2 to be conducted for a more meaningful error message
+        mixed_data = np.copy(operand_1.data)
+        self.mask = np.tile(np.expand_dims(self.mask, axis=0), reps=operand_1.shape[0])
+        self.mix_positions = np.nonzero(self.mask)
+        mixed_data[self.mix_positions] = np.reshape(operand_2.data, newshape=(-1))
+        return mixed_data
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        ...
+
+    def backward_op_2(self, error_signal, operand_1, operand_2=None):
+        ...
+
+
+class Convolution2D(Operation):
+
+    def __init__(self, stride: int, dilation: int = 1):
+        super().__init__()
+        # the functioanlity can be hacked with numpy...
+        # -> dilation by strechting the kernel tensor with the Mix-operation (use a non-gradient requiring  zero-tensor)
+        # ------> unnecessary if the built in functionality is to bused
+        # -> striding by cutting out unrequired columns and rows
+        # this is the base operation used by a Convolution2D-layer
+        # With this being no neural layer, we simply consider a convolution for a single kernel!

@@ -2,6 +2,8 @@ import numpy as np
 from ._operation import Slice
 from ._computation_graph import ComputationGraph
 
+from typing import List, Union
+
 class Tensor:
 
     tensor_code = 0
@@ -87,9 +89,25 @@ class Tensor:
                f'   autograd: {self.computation.__repr__()} \n' \
                f'   data: {self.data}'
 
+class TensorList:
+
+    def __init__(self, tensors: List[Tensor]):
+        self.tensors = tensors
+        self.earmark = [tensor.earmark for tensor in tensors]
+        self.requires_grad = np.logical_or(*[tensor.requires_grad for tensor in tensors])
+        self.name = f'[{",".join([tensor.name for tensor in tensors])}]'
+
+    def backward(self, error_signal: List):
+        if len(error_signal) != len(self.tensors):
+            raise ValueError(f'TensorList expected {len(self.tensors)} error signals. Got {len(error_signal)}')
+        for i in range(len(error_signal)):
+            self.tensors[i].backward(error_signal[i])
+
 def unary_interface(func):
-    def wrapper(tensor: Tensor, *args, **kwargs):
+    def wrapper(tensor: Union[Tensor, List[Tensor]], *args, **kwargs):
         res_data, operation = func(tensor, *args, **kwargs)
+        if type(tensor) is list:
+            tensor = TensorList(tensor)
         if tensor.requires_grad:
             return Tensor(data=res_data,
                           computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),

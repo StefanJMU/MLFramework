@@ -1,5 +1,5 @@
 from ._operation import *
-from ._tensor import Tensor, unary_interface, binary_interface
+from ._tensor import Tensor, TensorList, unary_interface, binary_interface
 
 
 @binary_interface
@@ -61,3 +61,14 @@ def root(tensor_1: Tensor, tensor_2: Tensor):
 def tdiv(tensor_1: Tensor, tensor_2: Tensor):
     operation = TensorDiv()
     return operation.forward(tensor_1, tensor_2), operation
+
+@unary_interface
+def concat(tensor_list, axis: int):
+    operation = Concatenate(axis)
+    return operation.forward(tensor_list), operation
+
+@binary_interface
+def mix(tensor_1: Tensor, tensor_2: Tensor, mask: np.array):
+    operation = Mix(mask)
+    res_data = operation.forward(tensor_1, tensor_2)
+    return res_data, operation

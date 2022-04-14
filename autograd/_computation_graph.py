@@ -2,7 +2,7 @@ import numpy as np
 
 class ComputationGraph:
 
-    def __init__(self, operation, tensor_1, tensor_2 = None):
+    def __init__(self, operation, tensor_1, tensor_2=None):
         self.operation = operation
         self.tensor_1 = tensor_1  # ref
         self.tensor_2 = tensor_2  # ref

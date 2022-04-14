@@ -1,5 +1,5 @@
 from ._tensor import Tensor, slice
-from ._interfaces import prod, sum, mean, transpose, tsum, tprod, reshape, square, power, sqrt, root, tdiv
+from ._interfaces import prod, sum, mean, transpose, tsum, tprod, reshape, square, power, sqrt, root, tdiv, concat, mix
 
 
 __all__ = ['Tensor',
@@ -15,4 +15,6 @@ __all__ = ['Tensor',
            'sqrt',
            'root',
            'slice',
-           'tdiv']
+           'tdiv',
+           'concat',
+           'mix']
