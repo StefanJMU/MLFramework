@@ -1,5 +1,5 @@
 import numpy as np
-from ._operation import Slice
+from ._operation import Slice, Reshape
 from ._computation_graph import ComputationGraph
 
 from typing import List, Union
@@ -7,6 +7,7 @@ from typing import List, Union
 class Tensor:
 
     tensor_code = 0
+    _jacobian = None
 
     def __init__(self,
                  data: np.array = None,
@@ -48,9 +49,14 @@ class Tensor:
         if self.requires_grad:
             self.grad = np.zeros(self.shape[1:], dtype="float")  #ignore batch-dimension
             self.computation = computation_graph
+            self._jacobian_pool = []
+            self.jacobian = None
 
         #keeps track of modifications of the underlying data
         self.earmark = 0
+
+    def size(self):
+        return self.data.size
 
     def __getitem__(self, key):
         return slice(self, key)
@@ -65,7 +71,8 @@ class Tensor:
             elif self.shape == ():  # starting the differentiation chain.
                 error_signal = np.ones_like(self.data)
             else:
-                raise AttributeError(f'Can calculate gradients only for scalar tensors directly.')
+                raise AttributeError('Can calculate gradients only for scalar tensors directly.'
+                                     'Consider the usage of functions masked_backward or jacobian.')
 
             if self.computation is not None:  # composed tensor
                 self.computation.backward(error_signal)
@@ -76,6 +83,45 @@ class Tensor:
                 error_signal = np.sum(error_signal, axis=0)
                 # update gradient
                 self.grad = self.grad + error_signal
+
+                # jacobian calculation
+                if Tensor._jacobian is not None:
+                    self._jacobian_pool.append(self.grad)
+                    self.zero_grad()
+                    if len(self._jacobian_pool) == Tensor._jacobian[-1]:
+                        self.jacobian = np.reshape(np.stack(self._jacobian_pool, axis=0),
+                                                   newshape=Tensor._jacobian[0] + self.grad.shape)
+                        self._jacobian_pool = []
+
+
+    def select_backward(self, selection: tuple):
+        """
+            TODO: overhaul this
+            Requires, that the tensor no longer has a batch dimension. Has to be conflated
+        """
+        if self.requires_grad:
+            if len(selection) != len(self.data.shape):
+                raise ValueError(f'The selection tuple is required to have {len(self.data.shape)}. Got {len(selection)}')
+            selected = slice(self, selection)
+            selected.backward()
+
+    def backward_jacobian(self):
+        if self.requires_grad:
+            flattened = reshape(self, shape=(-1,))
+            with Tensor._calculate_jacobian(self.shape):
+                for i in range(flattened.shape[0]):
+                    flattened.select_backward((i,))
+
+    @staticmethod
+    def _calculate_jacobian(shape: tuple):
+       class JacobianManager:
+           def __init__(self):
+               self.shape = shape
+           def __enter__(self):
+               Tensor._jacobian = (self.shape, np.prod(self.shape))
+           def __exit__(self, exc_type, exc_val, exc_tb):
+               Tensor._jacobian = None
+       return JacobianManager()
 
     def zero_grad(self):
         self.grad = np.zeros_like(self.grad)
@@ -130,4 +176,9 @@ def binary_interface(func):
 @unary_interface
 def slice(tensor, key):
     operation = Slice(key)
+    return operation.forward(tensor), operation
+
+@unary_interface
+def reshape(tensor: Tensor, shape: tuple):
+    operation = Reshape(shape)
     return operation.forward(tensor), operation

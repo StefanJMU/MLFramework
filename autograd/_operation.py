@@ -295,22 +295,40 @@ class Mix(Operation):
         self.mask = mask
 
     def _forward(self, operand_1, operand_2=None):
-        if operand_1.shape[1:] != self.mask.shape:
-            raise ValueError('Mix requires the mask to match the non-batch dimensions of operand_1.'
-                             f'Expected {self.mask.shape}. Got {operand_1.shape[1:]}')
+        if operand_1.shape != self.mask.shape:
+            raise ValueError('Mix requires the mask to match the dimensions of operand_1.'
+                             f'Expected {self.mask.shape}. Got {operand_1.shape}')
         # TODO: a check for the mask and operand_2 to be conducted for a more meaningful error message
         mixed_data = np.copy(operand_1.data)
-        self.mask = np.tile(np.expand_dims(self.mask, axis=0), reps=operand_1.shape[0])
         self.mix_positions = np.nonzero(self.mask)
         mixed_data[self.mix_positions] = np.reshape(operand_2.data, newshape=(-1))
         return mixed_data
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        ...
+        gradient = np.copy(error_signal)
+        gradient[self.mix_positions] = 0
+        return gradient
 
     def backward_op_2(self, error_signal, operand_1, operand_2=None):
-        ...
+        return error_signal[self.mix_positions]
 
+class Softmax(Operation):
+
+    def __init__(self, axis: int):
+        super().__init__()
+        self.axis = axis
+
+    def _forward(self, operand_1, operand_2=None):
+        op_exp = np.exp(operand_1.data)
+        aggregated = np.sum(op_exp, axis=self.axis, keepdims=True)
+        return op_exp / aggregated
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        # could theoretically be used from the forward operation
+        op_exp = np.exp(operand_1.data)
+        aggregated = np.sum(op_exp, axis=self.axis, keepdims=True)
+        softmax = op_exp / aggregated
+        return error_signal * (softmax * (1 - softmax))
 
 class Convolution2D(Operation):
 

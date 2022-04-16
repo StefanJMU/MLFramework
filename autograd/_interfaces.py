@@ -72,3 +72,10 @@ def mix(tensor_1: Tensor, tensor_2: Tensor, mask: np.array):
     operation = Mix(mask)
     res_data = operation.forward(tensor_1, tensor_2)
     return res_data, operation
+
+@unary_interface
+def softmax(tensor_1: Tensor, axis: int):
+    operation = Softmax(axis)
+    res_data = operation.forward(tensor_1)
+    return res_data, operation
+
