@@ -7,7 +7,6 @@ from typing import List, Union
 class Tensor:
 
     tensor_code = 0
-    _jacobian = None
 
     def __init__(self,
                  data: np.array = None,
@@ -61,9 +60,8 @@ class Tensor:
     def __getitem__(self, key):
         return slice(self, key)
 
-    def backward(self, error_signal: np.array = None):
+    def backward(self, error_signal: np.array = None, **kwargs):
         if self.requires_grad:
-
             if error_signal is not None:
                 if error_signal.shape != self.shape:
                     raise ValueError(f'Gradient has incompatible shape. Expected {self.shape}'
@@ -75,7 +73,7 @@ class Tensor:
                                      'Consider the usage of functions masked_backward or jacobian.')
 
             if self.computation is not None:  # composed tensor
-                self.computation.backward(error_signal)
+                self.computation.backward(error_signal, **kwargs)
             else:  # atomic and gradient requiring tensor
                 # reshape into 1D stack of gradients
                 error_signal = np.reshape(error_signal, [-1] + list(self.shape[1:]))
@@ -85,16 +83,16 @@ class Tensor:
                 self.grad = self.grad + error_signal
 
                 # jacobian calculation
-                if Tensor._jacobian is not None:
+                if 'jacobian' in kwargs:
+                    shape_meta = kwargs['jacobian']
                     self._jacobian_pool.append(self.grad)
                     self.zero_grad()
-                    if len(self._jacobian_pool) == Tensor._jacobian[-1]:
+                    if len(self._jacobian_pool) == shape_meta[-1]:
                         self.jacobian = np.reshape(np.stack(self._jacobian_pool, axis=0),
-                                                   newshape=Tensor._jacobian[0] + self.grad.shape)
+                                                   newshape=shape_meta[0] + self.grad.shape)
                         self._jacobian_pool = []
 
-
-    def select_backward(self, selection: tuple):
+    def select_backward(self, selection: tuple, **kwargs):
         """
             TODO: overhaul this
             Requires, that the tensor no longer has a batch dimension. Has to be conflated
@@ -103,25 +101,13 @@ class Tensor:
             if len(selection) != len(self.data.shape):
                 raise ValueError(f'The selection tuple is required to have {len(self.data.shape)}. Got {len(selection)}')
             selected = slice(self, selection)
-            selected.backward()
+            selected.backward(**kwargs)
 
     def backward_jacobian(self):
         if self.requires_grad:
             flattened = reshape(self, shape=(-1,))
-            with Tensor._calculate_jacobian(self.shape):
-                for i in range(flattened.shape[0]):
-                    flattened.select_backward((i,))
-
-    @staticmethod
-    def _calculate_jacobian(shape: tuple):
-       class JacobianManager:
-           def __init__(self):
-               self.shape = shape
-           def __enter__(self):
-               Tensor._jacobian = (self.shape, np.prod(self.shape))
-           def __exit__(self, exc_type, exc_val, exc_tb):
-               Tensor._jacobian = None
-       return JacobianManager()
+            for i in range(flattened.shape[0]):
+                flattened.select_backward((i,), jacobian=(self.shape, np.prod(self.shape)))
 
     def zero_grad(self):
         self.grad = np.zeros_like(self.grad)
@@ -143,11 +129,11 @@ class TensorList:
         self.requires_grad = np.logical_or(*[tensor.requires_grad for tensor in tensors])
         self.name = f'[{",".join([tensor.name for tensor in tensors])}]'
 
-    def backward(self, error_signal: List):
+    def backward(self, error_signal: List, **kwargs):
         if len(error_signal) != len(self.tensors):
             raise ValueError(f'TensorList expected {len(self.tensors)} error signals. Got {len(error_signal)}')
         for i in range(len(error_signal)):
-            self.tensors[i].backward(error_signal[i])
+            self.tensors[i].backward(error_signal[i], **kwargs)
 
 def unary_interface(func):
     def wrapper(tensor: Union[Tensor, List[Tensor]], *args, **kwargs):
