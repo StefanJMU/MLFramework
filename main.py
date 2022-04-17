@@ -17,14 +17,20 @@ tensor_2 = Tensor(data_2, name="T1", requires_grad=True)
 #data_4 = np.array([[2]], dtype='float')
 #tensor_4 = Tensor(data_4, requires_grad=True)
 
-ten = concat([tensor_1, tensor_2], axis=2)
+#ten = concat([tensor_1, tensor_2], axis=2)
 #res = mean(sum(sum(ten, axis=2), axis=1), axis=0)
 #res.backward()
 #print(tensor_1.grad)
 #print(tensor_2.grad)
 
-res = mean(ten, axis=0)
-res.backward_jacobian()
-print(tensor_2.jacobian)
+#res = mean(ten, axis=0)
+#res.backward_jacobian()
+#print(tensor_2.jacobian)
 #print(res[1,1].shape)
+from scipy.signal import convolve2d
 
+a = np.random.rand(5, 10, 10)
+b = np.random.rand(5, 3, 3)
+
+c = convolve2d(a, b, mode='same')
+print(c.shape)

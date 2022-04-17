@@ -1,5 +1,7 @@
 import numpy as np
 from abc import ABCMeta, abstractmethod
+from typing import Union, Literal
+from scipy.signal import convolve2d
 
 class Operation(metaclass=ABCMeta):
 
@@ -332,7 +334,7 @@ class Softmax(Operation):
 
 class Convolution2D(Operation):
 
-    def __init__(self, stride: int, dilation: int = 1):
+    def __init__(self, stride: int = 1, dilation: int = 1, padding: Union[int, Literal['same', 'valid']] = 'valid'):
         super().__init__()
         # the functioanlity can be hacked with numpy...
         # -> dilation by strechting the kernel tensor with the Mix-operation (use a non-gradient requiring  zero-tensor)
@@ -340,3 +342,64 @@ class Convolution2D(Operation):
         # -> striding by cutting out unrequired columns and rows
         # this is the base operation used by a Convolution2D-layer
         # With this being no neural layer, we simply consider a convolution for a single kernel!
+        self.stride = stride
+        self.dilation = dilation
+        self.padding = padding
+        #TODO: consistency checks for the values
+
+    def _stretch_kernel(self, kernel: np.array, dilation: int):
+        stretched_kernel = np.zeros((kernel.shape[0],  # feature dimension
+                                     (kernel.shape[1] - 1) * dilation + 1,
+                                     (kernel.shape[2] - 1) * dilation + 1))
+        indices = np.array(list(np.ndindex(kernel.shape)))
+        stretched_kernel[(indices[:, 0], dilation * indices[:, 1], dilation * indices[:, 2])] = np.reshape(kernel,
+                                                                                                           (-1,))
+        return stretched_kernel
+
+    def _convolution_formula(self, kernel_shape, input_shape, target_shape):
+        # that should be correct
+        paddings = []
+        for i in range(2):
+            paddings.append(np.ceil(0.5 * ((target_shape[i] - 1)*self.stride
+                                           + (kernel_shape[1 + i] - 1)*self.dilation  # skip feature dim
+                                           + 1
+                                           - input_shape[2 + i])))  #skip batch and feature dim
+        return paddings
+
+    def _pad(self, data, paddings):
+        padded_data = np.zeros((data.shape[0],
+                                data.shape[1],
+                                data.shape[2] + 2 * paddings[0],
+                                data.shape[3] + 2 * paddings[1]))
+        padded_data[:, :, paddings[0]:-paddings[0], paddings[1]:-paddings[1]] = data
+        return padded_data
+
+    def _forward(self, operand_1, operand_2=None):
+        # Remark: it is not yet known, wether the system supports batching (calculation on the last three dimensions)
+        # If not, a brutal loop over the batch has to be implemented!!!!
+        # I am afraid, it will not work
+        if len(operand_1.shape) != 4:
+            raise ValueError(f'TODO')
+        if operand_1.shape[1] != operand_2.shape[0]:
+            raise ValueError('Input tensor´s number of features does not match kernel. '
+                             f'Expected {operand_2.shape[0]} features. Got {operand_1.shape[1]}')
+
+        dilated_kernel = self._stretch_kernel(operand_2.data, self.dilation)
+        data = operand_1.data
+        if type(self.padding) == int:
+            data = self._pad(data, self.padding)
+        elif self.padding == 'same':
+            data = self._pad(data,
+                             paddings=self._convolution_formula(operand_2.shape, data.shape, data.shape[2:]))
+        convolved = convolve2d(operand_1.data, dilated_kernel, mode='valid')
+
+        # slice the result in case of stride being unequal to 1
+        if self.stride != 1:
+            spatial_mask = np.mod(np.arange(max(convolved.shape), self.stride))  #assuming here, that batching won´t work
+            convolved = np.compress(spatial_mask[:convolved.shape[0]], convolved, axis=0)
+            convolved = np.compress(spatial_mask[:convolved.shape[1]], convolved, axis=1)
+        #TODO: use stride tricks (the memory bloating is only for a single batch...)
+        #TODO: the stride handling and stretching of the kernel might be unnecessary...
+        #TODO: do recycle the code, implement a tensor operation stretch
+        return convolved
+
