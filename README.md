@@ -1,2 +1,2 @@
 # MLFramework
-Numpy based implementation of a Machine Learning automatic differentiation framework
+Numpy based implementation of an automatic differentiation framework for Machine Learning
