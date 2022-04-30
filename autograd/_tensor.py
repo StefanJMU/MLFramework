@@ -1,4 +1,6 @@
+
 import numpy as np
+import warnings
 from ._operation import Slice, Reshape
 from ._computation_graph import ComputationGraph
 
@@ -34,6 +36,8 @@ class Tensor:
             earmark: int
                 the earmark keeps track of modifications of the data underlying the tensor. Used to check validity
                 of the computation graphs, in which the tensor is involved
+            warnings: bool, default=True
+                flag indicating whether warnings regarding handling of the tensor class are to be pushed
     """
 
     # tensor counter
@@ -45,7 +49,8 @@ class Tensor:
                  dtype='float',
                  requires_grad: bool = False,
                  computation_graph=None,
-                 name: str = None):
+                 name: str = None,
+                 warnings: bool = True):
 
         if name is not None:
             self.name = name
@@ -57,12 +62,12 @@ class Tensor:
             raise ValueError("Cannot construct Tensor of type None")
         if data is not None:
             # TODO: expand batch dimension is shape has length 1
-            self.data = np.copy(data)
-            self.shape = self.data.shape
+            self.data_ = np.copy(data)
+            self.shape = self.data_.shape
         else:
             if shape is None:
                 raise ValueError("Tensor misses data or shape.")
-            self.data = np.zeros(shape, dtype=dtype)
+            self.data_ = np.zeros(shape, dtype=dtype)
             self.shape = shape
 
         #todo: check matching of dtype and typ of tensor
@@ -79,9 +84,35 @@ class Tensor:
 
         #keeps track of modifications of the underlying data
         self.earmark = 0
+        self.warnings = warnings
+
+    @property
+    def data(self):
+        if self.warnings:
+            warnings.warn("Direct retrieval of the data underlying a tensor. Beware of gradient compromising, if the "
+                          "data is manipulated directly.")
+        return self.data_
+
+    @data.setter
+    def data(self, value):
+        if self.warnings:
+            warnings.warn("Direct alteration of data underlying a tensor. A gradient might become compromised."
+                          "Consider the usage of the method set_data")
+        self.data_ = value
+        self.shape = self.data_.shape
+        self.dtype = self.data_.dtype
+
+    def set_data(self, value, slice_obj=None):
+        if slice_obj is None:
+            self.data_ = value
+            self.shape = self.data_.shape
+            self.dtype = self.data_.dtype
+        else:
+            self.data_[slice_obj] = value
+        self.earmark += 1
 
     def size(self):
-        return self.data.size
+        return self.data_.size
 
     def __getitem__(self, key):
         """
@@ -113,7 +144,7 @@ class Tensor:
                     raise ValueError(f'Gradient has incompatible shape. Expected {self.shape}'
                                      f'Got {error_signal.shape}')
             elif self.shape == ():  # starting the differentiation chain.
-                error_signal = np.ones_like(self.data)
+                error_signal = np.ones_like(self.data_)
             else:
                 raise AttributeError('Can calculate gradients only for scalar tensors directly.'
                                      'Consider the usage of functions masked_backward or jacobian.')
@@ -149,8 +180,8 @@ class Tensor:
 
         """
         if self.requires_grad:
-            if len(selection) != len(self.data.shape):
-                raise ValueError(f'The selection tuple is required to have {len(self.data.shape)}. Got {len(selection)}')
+            if len(selection) != len(self.data_.shape):
+                raise ValueError(f'The selection tuple is required to have {len(self.data_.shape)}. Got {len(selection)}')
             selected = slice(self, selection)
             selected.backward(**kwargs)
 
@@ -173,10 +204,10 @@ class Tensor:
         if self.computation is None:
             print("asdfasdf")
         return f'{type(self).__name__}: {self.name} \n' \
-               f'   dtype: {self.data.dtype} \n' \
-               f'   shape: {self.data.shape} \n' \
+               f'   dtype: {self.data_.dtype} \n' \
+               f'   shape: {self.data_.shape} \n' \
                f'   autograd: {self.computation.__repr__()} \n' \
-               f'   data: {self.data}'
+               f'   data: {self.data_}'
 
 
 class TensorList:

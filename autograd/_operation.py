@@ -68,7 +68,7 @@ class MatrixMatrixMul(Operation):
         return error_signal @ np.transpose(operand_2)
 
     def backward_op_2(self, error_signal: np.array, operand_1, operand_2):
-        return np.transose(operand_1.data) @ error_signal
+        return np.transose(operand_1.data_) @ error_signal
 
 class Sum(Operation):
 
@@ -78,14 +78,14 @@ class Sum(Operation):
         self.keepdims = keepdims
 
     def check_compatibility(self, operand_1, operand_2=None):
-        if not len(operand_1.data.shape) > self.axis:
+        if not len(operand_1.data_.shape) > self.axis:
             raise ValueError("TODO")
 
     def _forward(self, operand_1, operand_2):
-        return np.sum(operand_1.data, axis=self.axis, keepdims=self.keepdims)
+        return np.sum(operand_1.data_, axis=self.axis, keepdims=self.keepdims)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        expansion_mask = np.ones_like(operand_1.data)
+        expansion_mask = np.ones_like(operand_1.data_)
         if not self.keepdims:
             error_signal = np.expand_dims(error_signal, self.axis)
         return error_signal * expansion_mask
@@ -98,14 +98,14 @@ class Mean(Operation):
         self.keepdims = keepdims
 
     def check_compatibility(self, operand_1, operand_2=None):
-        if not len(operand_1.data.shape) > self.axis:
+        if not len(operand_1.data_.shape) > self.axis:
             raise ValueError("TODO")
 
     def _forward(self, operand_1, operand_2):
-        return np.mean(operand_1.data, axis=self.axis, keepdims=self.keepdims)
+        return np.mean(operand_1.data_, axis=self.axis, keepdims=self.keepdims)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        expansion_mask = (1/operand_1.shape[self.axis]) * np.ones_like(operand_1.data)
+        expansion_mask = (1/operand_1.shape[self.axis]) * np.ones_like(operand_1.data_)
         if not self.keepdims:
             error_signal = np.expand_dims(error_signal, self.axis)
         return error_signal * expansion_mask
@@ -118,11 +118,11 @@ class Prod(Operation):
         self.keepdims = keepdims
 
     def _forward(self, operand_1, operand_2=None):
-        return np.prod(operand_1.data, axis=self.axis, keepdims=self.keepdims)
+        return np.prod(operand_1.data_, axis=self.axis, keepdims=self.keepdims)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        axis_product = np.prod(operand_1.data, axis=self.axis, keepdims=True)
-        prop_factor = axis_product * np.reciprocal(operand_1.data)
+        axis_product = np.prod(operand_1.data_, axis=self.axis, keepdims=True)
+        prop_factor = axis_product * np.reciprocal(operand_1.data_)
         if not self.keepdims:
             error_signal = np.expand_dims(error_signal, axis=self.axis)
         return error_signal * prop_factor
@@ -133,10 +133,10 @@ class Square(Operation):
         super().__init__()
 
     def _forward(self, operand_1, operand_2=None):
-        return np.square(operand_1.data)
+        return np.square(operand_1.data_)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        return error_signal * 2 * operand_1.data
+        return error_signal * 2 * operand_1.data_
 
 class Power(Operation):
 
@@ -144,14 +144,14 @@ class Power(Operation):
         super().__init__()
 
     def _forward(self, operand_1, operand_2=None):
-        return np.power(operand_1.data, operand_2.data)
+        return np.power(operand_1.data_, operand_2.data_)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        gradient = error_signal * operand_2.data * np.power(operand_1.data, operand_2.data - 1)
+        gradient = error_signal * operand_2.data_ * np.power(operand_1.data_, operand_2.data_ - 1)
         return self.debroadcast(gradient, operand_1.shape)
 
     def backward_op_2(self, error_signal, operand_1, operand_2=None):
-        gradient = np.exp(np.log(operand_1.data) * operand_2.data) * np.log(operand_1.data)
+        gradient = np.exp(np.log(operand_1.data_) * operand_2.data_) * np.log(operand_1.data_)
         return self.debroadcast(gradient, operand_2.shape)
 
 class Sqrt(Operation):
@@ -160,10 +160,10 @@ class Sqrt(Operation):
         super().__init__()
 
     def _forward(self, operand_1, operand_2=None):
-        return np.sqrt(operand_1.data)
+        return np.sqrt(operand_1.data_)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        return error_signal * 0.5 * np.power(operand_1.data, -0.5)
+        return error_signal * 0.5 * np.power(operand_1.data_, -0.5)
 
 class Root(Operation):
 
@@ -171,16 +171,16 @@ class Root(Operation):
         super().__init__()
 
     def _forward(self, operand_1, operand_2=None):
-        return np.power(operand_1.data, np.reciprocal(operand_2.data))
+        return np.power(operand_1.data_, np.reciprocal(operand_2.data_))
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        op_2_reci = np.reciprocal(operand_2.data)
-        gradient = op_2_reci * np.power(operand_1.data, op_2_reci - 1)
+        op_2_reci = np.reciprocal(operand_2.data_)
+        gradient = op_2_reci * np.power(operand_1.data_, op_2_reci - 1)
         return self.debroadcast(gradient, operand_1.shape)
 
     def backward_op_2(self, error_signal, operand_1, operand_2=None):
-        gradient = -1 * np.exp(np.log(operand_1.data) * np.reciprocal(operand_2.data)) \
-                   * np.log(operand_1.data) * np.reciprocal(np.square(operand_2.data))
+        gradient = -1 * np.exp(np.log(operand_1.data_) * np.reciprocal(operand_2.data_)) \
+                   * np.log(operand_1.data_) * np.reciprocal(np.square(operand_2.data_))
         return self.debroadcast(gradient, operand_2.shape)
 
 class Transpose(Operation):
@@ -194,7 +194,7 @@ class Transpose(Operation):
             self.inverse_permutation[axis_permutation[i]] = i
 
     def _forward(self, operand_1, operand_2=None):
-        return np.transpose(operand_1.data, self.axis_permutation)
+        return np.transpose(operand_1.data_, self.axis_permutation)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return np.transpose(error_signal, self.inverse_permutation)
@@ -205,7 +205,7 @@ class TensorSum(Operation):
         super().__init__()
 
     def _forward(self, operand_1, operand_2=None):
-        return operand_1.data + operand_2.data
+        return operand_1.data_ + operand_2.data_
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         if operand_1.shape != error_signal.shape:
@@ -223,15 +223,15 @@ class TensorProduct(Operation):
         super().__init__()
 
     def _forward(self, operand_1, operand_2=None):
-        return operand_1.data * operand_2.data
+        return operand_1.data_ * operand_2.data_
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        op2_data = np.broadcast_to(operand_2.data, error_signal.shape)
+        op2_data = np.broadcast_to(operand_2.data_, error_signal.shape)
         grad_factor = op2_data * error_signal
         return self.debroadcast(grad_factor, operand_1.shape)
 
     def backward_op_2(self, error_signal, operand_1, operand_2=None):
-        op1_data = np.broadcast_to(operand_1.data, error_signal.shape)
+        op1_data = np.broadcast_to(operand_1.data_, error_signal.shape)
         grad_factor = op1_data * error_signal
         return self.debroadcast(grad_factor, operand_2.shape)
 
@@ -242,7 +242,7 @@ class Reshape(Operation):
         self.new_shape = new_shape
 
     def _forward(self, operand_1, operand_2=None):
-        return np.reshape(operand_1.data, self.new_shape)
+        return np.reshape(operand_1.data_, self.new_shape)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return np.reshape(error_signal, operand_1.shape)
@@ -254,7 +254,7 @@ class Slice(Operation):
         self.key = key
 
     def _forward(self, operand_1, operand_2=None):
-        return operand_1.data[self.key]
+        return operand_1.data_[self.key]
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         gradient = np.zeros(operand_1.shape)
@@ -267,17 +267,17 @@ class TensorDiv(Operation):
         super().__init__()
 
     def _forward(self, operand_1, operand_2=None):
-        return operand_1.data / operand_2.data
+        return operand_1.data_ / operand_2.data_
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        op_2_data = np.broadcast_to(np.reciprocal(operand_2.data), error_signal.shape)
+        op_2_data = np.broadcast_to(np.reciprocal(operand_2.data_), error_signal.shape)
         gradient = error_signal * op_2_data
         return self.debroadcast(gradient, operand_1.shape)
 
     def backward_op_2(self, error_signal, operand_1, operand_2=None):
-        op_1_data = np.broadcast_to(operand_1.data, error_signal.shape)
+        op_1_data = np.broadcast_to(operand_1.data_, error_signal.shape)
         grad_factor = error_signal * op_1_data
-        gradient = -grad_factor * np.reciprocal(np.square(operand_2.data))
+        gradient = -grad_factor * np.reciprocal(np.square(operand_2.data_))
         return self.debroadcast(gradient, operand_2.shape)
 
 class Concatenate(Operation):
@@ -288,7 +288,7 @@ class Concatenate(Operation):
 
     def _forward(self, tensor_list, operand_2=None):
         # operand_1 is a list of Tensors
-        data_list = [tensor.data for tensor in tensor_list]
+        data_list = [tensor.data_ for tensor in tensor_list]
         concatenated = np.concatenate(data_list, axis=self.axis)
         return concatenated
 
@@ -309,9 +309,9 @@ class Mix(Operation):
             raise ValueError('Mix requires the mask to match the dimensions of operand_1.'
                              f'Expected {self.mask.shape}. Got {operand_1.shape}')
         # TODO: a check for the mask and operand_2 to be conducted for a more meaningful error message
-        mixed_data = np.copy(operand_1.data)
+        mixed_data = np.copy(operand_1.data_)
         self.mix_positions = np.nonzero(self.mask)
-        mixed_data[self.mix_positions] = np.reshape(operand_2.data, newshape=(-1))
+        mixed_data[self.mix_positions] = np.reshape(operand_2.data_, newshape=(-1))
         return mixed_data
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
@@ -329,13 +329,13 @@ class Softmax(Operation):
         self.axis = axis
 
     def _forward(self, operand_1, operand_2=None):
-        op_exp = np.exp(operand_1.data)
+        op_exp = np.exp(operand_1.data_)
         aggregated = np.sum(op_exp, axis=self.axis, keepdims=True)
         return op_exp / aggregated
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         # could theoretically be used from the forward operation
-        op_exp = np.exp(operand_1.data)
+        op_exp = np.exp(operand_1.data_)
         aggregated = np.sum(op_exp, axis=self.axis, keepdims=True)
         softmax = op_exp / aggregated
         return error_signal * (softmax * (1 - softmax))
@@ -347,7 +347,7 @@ class Squeeze(Operation):
         self.axis = axis
 
     def _forward(self, operand_1, operand_2=None):
-        return np.squeeze(operand_1.data, axis=self.axis)
+        return np.squeeze(operand_1.data_, axis=self.axis)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return np.expand_dims(error_signal, axis=self.axis)
@@ -359,10 +359,11 @@ class Unsqueeze(Operation):
         self.axis = axis
 
     def _forward(self, operand_1, operand_2=None):
-        return np.expand_dims(operand_1.data, axis=self.axis)
+        return np.expand_dims(operand_1.data_, axis=self.axis)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return np.squeeze(error_signal, axis=self.axis)
+
 
 class Tile(Operation):
 
@@ -371,7 +372,7 @@ class Tile(Operation):
         self.reps = reps
 
     def _forward(self, operand_1, operand_2=None):
-        return np.tile(operand_1.data, reps=self.reps)
+        return np.tile(operand_1.data_, reps=self.reps)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return self.debroadcast(error_signal, operand_1.shape)
