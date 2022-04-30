@@ -14,18 +14,18 @@ def tprod(tensor_1: Tensor, tensor_2: Tensor):
     return operation.forward(tensor_1, tensor_2), operation
 
 @unary_interface
-def sum(tensor: Tensor, axis: int):
-    operation = Sum(axis)
+def sum(tensor: Tensor, axis: int, keepdims=False):
+    operation = Sum(axis, keepdims)
     return operation.forward(tensor), operation
 
 @unary_interface
-def prod(tensor: Tensor, axis: int):
-    operation = Prod(axis)
+def prod(tensor: Tensor, axis: int, keepdims=False):
+    operation = Prod(axis, keepdims)
     return operation.forward(tensor), operation
 
 @unary_interface
-def mean(tensor: Tensor, axis: int):
-    operation = Mean(axis)
+def mean(tensor: Tensor, axis: int, keepdims=False):
+    operation = Mean(axis, keepdims)
     return operation.forward(tensor), operation
 
 @unary_interface

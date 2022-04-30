@@ -72,51 +72,60 @@ class MatrixMatrixMul(Operation):
 
 class Sum(Operation):
 
-    def __init__(self, axis: int):
+    def __init__(self, axis: int, keepdims=False):
         super().__init__()
         self.axis = axis
+        self.keepdims = keepdims
 
     def check_compatibility(self, operand_1, operand_2=None):
         if not len(operand_1.data.shape) > self.axis:
             raise ValueError("TODO")
 
     def _forward(self, operand_1, operand_2):
-        return np.sum(operand_1.data, axis=self.axis)
+        return np.sum(operand_1.data, axis=self.axis, keepdims=self.keepdims)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         expansion_mask = np.ones_like(operand_1.data)
-        return np.expand_dims(error_signal, self.axis) * expansion_mask
+        if not self.keepdims:
+            error_signal = np.expand_dims(error_signal, self.axis)
+        return error_signal * expansion_mask
 
 class Mean(Operation):
 
-    def __init__(self, axis: int):
+    def __init__(self, axis: int, keepdims=False):
         super().__init__()
         self.axis = axis
+        self.keepdims = keepdims
 
     def check_compatibility(self, operand_1, operand_2=None):
         if not len(operand_1.data.shape) > self.axis:
             raise ValueError("TODO")
 
     def _forward(self, operand_1, operand_2):
-        return np.mean(operand_1.data, axis=self.axis)
+        return np.mean(operand_1.data, axis=self.axis, keepdims=self.keepdims)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         expansion_mask = (1/operand_1.shape[self.axis]) * np.ones_like(operand_1.data)
-        return np.expand_dims(error_signal, self.axis) * expansion_mask
+        if not self.keepdims:
+            error_signal = np.expand_dims(error_signal, self.axis)
+        return error_signal * expansion_mask
 
 class Prod(Operation):
 
-    def __init__(self, axis: int):
+    def __init__(self, axis: int, keepdims=False):
         super().__init__()
         self.axis = axis
+        self.keepdims = keepdims
 
     def _forward(self, operand_1, operand_2=None):
-        return np.prod(operand_1.data, axis=self.axis)
+        return np.prod(operand_1.data, axis=self.axis, keepdims=self.keepdims)
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         axis_product = np.prod(operand_1.data, axis=self.axis, keepdims=True)
         prop_factor = axis_product * np.reciprocal(operand_1.data)
-        return np.expand_dims(error_signal, axis=self.axis) * prop_factor
+        if not self.keepdims:
+            error_signal = np.expand_dims(error_signal, axis=self.axis)
+        return error_signal * prop_factor
 
 class Square(Operation):
 
