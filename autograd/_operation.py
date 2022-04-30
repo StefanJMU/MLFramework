@@ -363,3 +363,16 @@ class Unsqueeze(Operation):
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return np.squeeze(error_signal, axis=self.axis)
+
+class Tile(Operation):
+
+    def __init__(self, reps):
+        super().__init__()
+        self.reps = reps
+
+    def _forward(self, operand_1, operand_2=None):
+        return np.tile(operand_1.data, reps=self.reps)
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        return self.debroadcast(error_signal, operand_1.shape)
+

@@ -20,4 +20,5 @@ __all__ = ['Tensor',
            'mix',
            'softmax',
            'unsqueeze',
-           'squeeze']
+           'squeeze',
+           'tile']
