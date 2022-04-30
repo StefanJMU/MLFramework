@@ -18,4 +18,6 @@ __all__ = ['Tensor',
            'tdiv',
            'concat',
            'mix',
-           'softmax']
+           'softmax',
+           'unsqueeze',
+           'squeeze']

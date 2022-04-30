@@ -199,26 +199,28 @@ class TensorList:
 
 def unary_interface(func):
     def wrapper(tensor: Union[Tensor, List[Tensor]], *args, **kwargs):
-        res_data, operation = func(tensor, *args, **kwargs)
+        res_data, operation, name = func(tensor, *args, **kwargs)
         if type(tensor) is list:
             tensor = TensorList(tensor)
         if tensor.requires_grad:
             return Tensor(data=res_data,
                           computation_graph=ComputationGraph(operation=operation, tensor_1=tensor),
-                          requires_grad=True)
+                          requires_grad=True,
+                          name=name)
         else:
-            return Tensor(data=res_data)
+            return Tensor(data=res_data, name=name)
     return wrapper
 
 def binary_interface(func):
     def wrapper(tensor_1: Tensor, tensor_2: Tensor, *args, **kwargs):
-        res_data, operation = func(tensor_1, tensor_2, *args, **kwargs)
+        res_data, operation, name = func(tensor_1, tensor_2, *args, **kwargs)
         if tensor_1.requires_grad or tensor_2.requires_grad:
             return Tensor(data=res_data,
                           computation_graph=ComputationGraph(operation=operation, tensor_1=tensor_1, tensor_2=tensor_2),
-                          requires_grad=True)
+                          requires_grad=True,
+                          name=name)
         else:
-            return Tensor(data=res_data)
+            return Tensor(data=res_data, name=name)
     return wrapper
 
 @unary_interface

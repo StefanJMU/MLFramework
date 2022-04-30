@@ -340,3 +340,26 @@ class Softmax(Operation):
         softmax = op_exp / aggregated
         return error_signal * (softmax * (1 - softmax))
 
+class Squeeze(Operation):
+
+    def __init__(self, axis: int):
+        super().__init__()
+        self.axis = axis
+
+    def _forward(self, operand_1, operand_2=None):
+        return np.squeeze(operand_1.data, axis=self.axis)
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        return np.expand_dims(error_signal, axis=self.axis)
+
+class Unsqueeze(Operation):
+
+    def __init__(self, axis: int):
+        super().__init__()
+        self.axis = axis
+
+    def _forward(self, operand_1, operand_2=None):
+        return np.expand_dims(operand_1.data, axis=self.axis)
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        return np.squeeze(error_signal, axis=self.axis)
