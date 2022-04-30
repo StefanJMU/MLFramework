@@ -4,8 +4,39 @@ from ._computation_graph import ComputationGraph
 
 from typing import List, Union
 
+
 class Tensor:
 
+    """
+        Class modelling tensor objects. The first dimension is always interpreted as a batch dimension
+
+        Attributes
+        ----------
+            data: np.array
+                underlying numpy array
+            dtype: str, default='float'
+                datatype of underlying numpy data array
+            shape: tuple
+                shape of the underlying numpy array
+            requires_grad: bool, default=False
+                flag indicating, whether the tensor requires gradient calculation
+            computation_graph: ComputationGraph, default=None
+                computation graph for compound tensors, resulting of operations
+            name: str, default=None
+                name of the tensor. If None, the next tensor_code is used
+            grad: np.array
+                gradient of the tensor, with respect to backwarded computation-graphs, the tensor participates in.
+                The attribute is only present, if the tensor requires gradients.
+            jacobian: np.array
+                jacobian of the tensor, with respect to all elements of a backwarded tensor, having this tensor in its
+                computation graph.
+                The attribute is only present, if the tensor requires gradients.
+            earmark: int
+                the earmark keeps track of modifications of the data underlying the tensor. Used to check validity
+                of the computation graphs, in which the tensor is involved
+    """
+
+    # tensor counter
     tensor_code = 0
 
     def __init__(self,
@@ -15,10 +46,7 @@ class Tensor:
                  requires_grad: bool = False,
                  computation_graph=None,
                  name: str = None):
-        """
-            TODO: implement
-            construction options
-        """
+
         if name is not None:
             self.name = name
         else:
@@ -39,15 +67,13 @@ class Tensor:
 
         #todo: check matching of dtype and typ of tensor
 
-        #maybe shape and type should be saved individually
         if requires_grad and dtype != "float":
             raise ValueError("A Tensor requiring gradients can only be of type float")
 
         self.requires_grad = requires_grad
-        self.computation = None
+        self.computation = computation_graph
         if self.requires_grad:
             self.grad = np.zeros(self.shape[1:], dtype="float")  #ignore batch-dimension
-            self.computation = computation_graph
             self._jacobian_pool = []
             self.jacobian = None
 
@@ -58,10 +84,30 @@ class Tensor:
         return self.data.size
 
     def __getitem__(self, key):
+        """
+            Calculates the slice-operation on the tensor
+
+            Parameters
+            ----------
+            key: slice-object
+                slice identifier
+            Returns
+            -------
+                Tensor sliced out of this tensor according to key
+        """
         return slice(self, key)
 
     def backward(self, error_signal: np.array = None, **kwargs):
+        """
+            Calculates the backward operation of the tensor
+
+            Parameters
+            ----------
+            error_signal: np.array
+                error_signals for the elements of the tensor. Required to have a matching shape with the tensor
+        """
         if self.requires_grad:
+
             if error_signal is not None:
                 if error_signal.shape != self.shape:
                     raise ValueError(f'Gradient has incompatible shape. Expected {self.shape}'
@@ -76,7 +122,7 @@ class Tensor:
                 self.computation.backward(error_signal, **kwargs)
             else:  # atomic and gradient requiring tensor
                 # reshape into 1D stack of gradients
-                error_signal = np.reshape(error_signal, [-1] + list(self.shape[1:]))
+                error_signal = np.reshape(error_signal, [-1] + list(self.grad.shape))
                 # conflate by summation
                 error_signal = np.sum(error_signal, axis=0)
                 # update gradient
@@ -94,8 +140,13 @@ class Tensor:
 
     def select_backward(self, selection: tuple, **kwargs):
         """
-            TODO: overhaul this
-            Requires, that the tensor no longer has a batch dimension. Has to be conflated
+            Calculates derivative for a single element of a tensor
+
+            Parameters
+            ---------
+            selection : tuple
+                tuple localizing the element to be differentiated in the tensor
+
         """
         if self.requires_grad:
             if len(selection) != len(self.data.shape):
@@ -104,12 +155,18 @@ class Tensor:
             selected.backward(**kwargs)
 
     def backward_jacobian(self):
+        """
+            Calculates the jacobian, i.e. the partial derivative with respect to every element in the tensor
+        """
         if self.requires_grad:
             flattened = reshape(self, shape=(-1,))
             for i in range(flattened.shape[0]):
-                flattened.select_backward((i,), jacobian=(self.shape, np.prod(self.shape)))
+                flattened.select_backward((i,), jacobian=(self.shape, flattened.shape[0]))
 
     def zero_grad(self):
+        """
+            Zeros the gradient of the tensor
+        """
         self.grad = np.zeros_like(self.grad)
 
     def __repr__(self):
@@ -121,7 +178,12 @@ class Tensor:
                f'   autograd: {self.computation.__repr__()} \n' \
                f'   data: {self.data}'
 
+
 class TensorList:
+
+    """
+        Wraps a list of Tensors
+    """
 
     def __init__(self, tensors: List[Tensor]):
         self.tensors = tensors
