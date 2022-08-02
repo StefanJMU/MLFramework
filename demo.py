@@ -26,29 +26,6 @@ print(tensor_1.grad)
 import torch
 
 
-class Test:
-
-    # for commutative operations the interpreter will probably check for both commutations whether one of the objects
-    # involved as an overwritten method. If not the default will apply and if both have an override, the order will remain fix
-    def __add__(self, other):
-        print("in add")
-        return self
-
-#t = Test()
-#g = t + 1
-# so no, it does not...
-# how does torch handle it?
-# An option is actually, that the interpreter provides hooks for the operations for all types. The system
-# will check the hooks for the basic types and dispatch the appropriate registered function...
-# I will conduct a recherche
-#print(type(g))
-
-# this should actually be possible
-#int.__add__ = lambda x: print("yep")
-
-#k = 5
-#k = k + 1
-
 
 
 
