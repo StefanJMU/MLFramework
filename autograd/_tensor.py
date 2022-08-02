@@ -1,7 +1,7 @@
 
 import numpy as np
 import warnings
-from ._operation import Slice, Reshape
+from ._operation import Slice, Reshape, TensorSum, TensorDiv, TensorProduct, TensorSub, MatrixMatrixMul, Power
 from ._computation_graph import ComputationGraph
 
 from typing import List, Union
@@ -46,7 +46,7 @@ class Tensor:
     def __init__(self,
                  data: np.array = None,
                  shape=None,
-                 dtype='float',
+                 dtype=None,
                  requires_grad: bool = False,
                  computation_graph=None,
                  name: str = None,
@@ -58,13 +58,15 @@ class Tensor:
             self.name = f'#{Tensor.tensor_code}'
             Tensor.tensor_code += 1
 
-        if dtype is None:
-            raise ValueError("Cannot construct Tensor of type None")
         if data is not None:
             # TODO: expand batch dimension is shape has length 1
             self.data_ = np.copy(data)
             self.shape = self.data_.shape
+            if dtype is not None and self.data_.dtype != dtype:
+                self.data_ = self.data_.astype(dtype)
         else:
+            if dtype is None:
+                raise ValueError(f'Requires argument dtype, if no initializing data is given.')
             if shape is None:
                 raise ValueError("Tensor misses data or shape.")
             self.data_ = np.zeros(shape, dtype=dtype)
@@ -72,7 +74,7 @@ class Tensor:
 
         #todo: check matching of dtype and typ of tensor
 
-        if requires_grad and dtype != "float":
+        if requires_grad and self.data_.dtype != "float":
             raise ValueError("A Tensor requiring gradients can only be of type float")
 
         self.requires_grad = requires_grad
@@ -89,27 +91,9 @@ class Tensor:
     @property
     def data(self):
         if self.warnings:
-            warnings.warn("Direct retrieval of the data underlying a tensor. Beware of gradient compromising, if the "
-                          "data is manipulated directly.")
+            warnings.warn("Direct retrieval of the data underlying a tensor possible. "
+                          "Beware of gradient compromising, if the data is transparently manipulated.")
         return self.data_
-
-    @data.setter
-    def data(self, value):
-        if self.warnings:
-            warnings.warn("Direct alteration of data underlying a tensor. A gradient might become compromised."
-                          "Consider the usage of the method set_data")
-        self.data_ = value
-        self.shape = self.data_.shape
-        self.dtype = self.data_.dtype
-
-    def set_data(self, value, slice_obj=None):
-        if slice_obj is None:
-            self.data_ = value
-            self.shape = self.data_.shape
-            self.dtype = self.data_.dtype
-        else:
-            self.data_[slice_obj] = value
-        self.earmark += 1
 
     def size(self):
         return self.data_.size
@@ -127,6 +111,89 @@ class Tensor:
                 Tensor sliced out of this tensor according to key
         """
         return slice(self, key)
+
+    def __setitem__(self, key, value):
+        if self.warnings:
+            warnings.warn("Direct alteration of data underlying a tensor. A gradient in a computation tree "
+                          "involving this tensor becomes compromised.")
+        self.data_[key] = value
+        self.earmark += 1
+
+    def _type_check(self, other: np.array):
+        """
+            Check type compatibility. A numeric type is required
+        """
+        if not np.can_cast(other.dtype, np.float):
+            raise ValueError(f'Tensor operations only support numeric types. Got type {other.dtype}')
+
+    def _cast_to_tensor(self, other):
+        """
+            Cast other into a tensor
+        """
+        if isinstance(other, Tensor):
+            return other
+
+        if not isinstance(other, np.ndarray):
+            try:
+                other = np.array(other)
+            except Exception as e:
+                raise ValueError(f'{other} could not be casted into a numpy array')
+        self._type_check(other)
+        return Tensor(other, requires_grad=False)
+
+    def _casting_prelude(operation):
+        def wrapper(self, other):
+            other = self._cast_to_tensor(other)
+            return operation(self, other)
+        return wrapper
+
+    @_casting_prelude
+    def __add__(self, other):
+        return tsum(self, other)
+
+    @_casting_prelude
+    def __radd__(self, other):
+        return tsum(other, self)
+
+    @_casting_prelude
+    def __sub__(self, other):
+        return tsub(self, other)
+
+    @_casting_prelude
+    def __rsub__(self, other):
+        return tsub(other, self)
+
+    @_casting_prelude
+    def __mul__(self, other):
+        return tprod(self, other)
+
+    @_casting_prelude
+    def __rmul__(self, other):
+        return tprod(other, self)
+
+    @_casting_prelude
+    def __pow__(self, other):
+       return power(self, other)
+
+    @_casting_prelude
+    def __rpow__(self, other):
+        return power(other, self)
+
+    @_casting_prelude
+    def __itruediv__(self, other):
+        return tdiv(self, other)
+
+    @_casting_prelude
+    def __rdiv__(self, other):
+        return tdiv(other, self)
+
+    @_casting_prelude
+    def __matmul__(self, other):
+        return matmul(self, other)
+
+    @_casting_prelude
+    def __rmatmul__(self, other):
+        return matmul(other, self)
 
     def backward(self, error_signal: np.array = None, **kwargs):
         """
@@ -228,6 +295,7 @@ class TensorList:
         for i in range(len(error_signal)):
             self.tensors[i].backward(error_signal[i], **kwargs)
 
+
 def unary_interface(func):
     def wrapper(tensor: Union[Tensor, List[Tensor]], *args, **kwargs):
         res_data, operation, name = func(tensor, *args, **kwargs)
@@ -242,6 +310,7 @@ def unary_interface(func):
             return Tensor(data=res_data, name=name)
     return wrapper
 
+
 def binary_interface(func):
     def wrapper(tensor_1: Tensor, tensor_2: Tensor, *args, **kwargs):
         res_data, operation, name = func(tensor_1, tensor_2, *args, **kwargs)
@@ -254,12 +323,50 @@ def binary_interface(func):
             return Tensor(data=res_data, name=name)
     return wrapper
 
+
 @unary_interface
 def slice(tensor, key):
     operation = Slice(key)
     return operation.forward(tensor), operation
 
+
 @unary_interface
 def reshape(tensor: Tensor, shape: tuple):
     operation = Reshape(shape)
     return operation.forward(tensor), operation
+
+
+@binary_interface
+def tsum(tensor_1: Tensor, tensor_2: Tensor, name: str = None):
+    operation = TensorSum()
+    return operation.forward(tensor_1, tensor_2), operation, name
+
+
+@binary_interface
+def tprod(tensor_1: Tensor, tensor_2: Tensor, name: str = None):
+    operation = TensorProduct()
+    return operation.forward(tensor_1, tensor_2), operation, name
+
+
+@binary_interface
+def tsub(tensor_1: Tensor, tensor_2: Tensor, name: str = None):
+    operation = TensorSub()
+    return operation.forward(tensor_1, tensor_2), operation, name
+
+
+@binary_interface
+def tdiv(tensor_1: Tensor, tensor_2: Tensor, name: str = None):
+    operation = TensorDiv()
+    return operation.forward(tensor_1, tensor_2), operation, name
+
+
+@binary_interface
+def power(tensor_1: Tensor, tensor_2: Tensor, name: str = None):
+    operation = Power()
+    return operation.forward(tensor_1, tensor_2), operation, name
+
+
+@binary_interface
+def matmul(tensor_1: Tensor, tensor_2: Tensor, name: str = None):
+    operation = MatrixMatrixMul()
+    return operation.forward(tensor_1, tensor_2), operation, name

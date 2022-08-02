@@ -1,4 +1,4 @@
-from ._tensor import Tensor, slice
+from ._tensor import Tensor, slice, reshape, tprod, tsub, tdiv, tsum, matmul, power
 from ._interfaces import *
 
 
@@ -8,6 +8,8 @@ __all__ = ['Tensor',
            'mean',
            'transpose',
            'tsum',
+           'tsub',
+           'matmul',
            'tprod',
            'reshape',
            'square',

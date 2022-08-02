@@ -1,31 +1,26 @@
 import numpy as np
 from abc import ABCMeta, abstractmethod
-from typing import Union, Literal
-from scipy.signal import convolve2d
+from typing import Union, Literal, Tuple
 
-from numpy.lib.stride_tricks import sliding_window_view
 
 class Operation(metaclass=ABCMeta):
 
-    def __init__(self, name: str=None, *args, **kwargs):
+    def __init__(self, name: str = None, autobroadcast: bool = True, **kwargs):
         if name is None:
             self.name = type(self).__name__
         else:
             self.name = name
+        self.autobroadcast = autobroadcast
 
     def check_compatibility(self, operand_1, operand_2=None):
         return True
 
-    @abstractmethod
-    def _forward(self, operand_1, operand_2=None):
-        ...
-
-    @abstractmethod
-    def backward_op_1(self, error_signal, operand_1, operand_2=None):
-        ...
-
     def forward(self, operand_1, operand_2=None):
         self.check_compatibility(operand_1, operand_2)
+        if self.autobroadcast:
+            #c_shape = self.common_shape(operand_1.shape, operand_2.shape)
+            #operand_1 =
+            ...
         return self._forward(operand_1, operand_2)
 
     def backward_op_2(self, error_signal, operand_1, operand_2=None):
@@ -35,20 +30,37 @@ class Operation(metaclass=ABCMeta):
         """
             function debroacasts error_signal to shape
         """
-        dims = len(error_signal.shape)
-        for i in range(dims - 1, -1, -1):
-            if i >= len(shape):
-                # Contract the dimension completely
-                error_signal = np.sum(error_signal, axis=i)
-            else:
-                # Contract to previous length in the dimension (detiling)
-                n_blocs = error_signal.shape[i] // shape[i]
-                error_signal = np.reshape(error_signal, newshape=error_signal.shape[:i]
-                                                                 + (n_blocs, -1)
-                                                                 + error_signal.shape[i+1:])
-                error_signal = np.sum(error_signal, axis=i)
+        if len(error_signal.shape) > len(shape):
+            error_signal = np.sum(error_signal, axis=error_signal.shape[len(shape):])
+        for i in range(len(shape) - 1, -1, -1):
+            # Contract to previous length in the dimension (detiling)
+            #error_signal = np.reshape(error_signal, newshape=error_signal.shape[:i]
+            #                                                + (shape[i], -1)
+            #                                               + error_signal.shape[i+1
+            error_signal = np.reshape(error_signal, newshape=error_signal.shape[:i]
+                                                             + (-1, shape[i])
+                                                             + error_signal.shape[i + 1:])
+            error_signal = np.sum(error_signal, axis=i)
+
         return error_signal
-    
+
+    def common_shape(self, shape_1, shape_2):
+        ...
+        # TODO
+
+    def broadcast(self, error_signal, shape):
+        ...
+        # TODO
+
+    @abstractmethod
+    def _forward(self, operand_1, operand_2=None):
+        ...
+
+    @abstractmethod
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        ...
+
+
 class MatrixMatrixMul(Operation):
 
     def __init__(self):
@@ -70,16 +82,20 @@ class MatrixMatrixMul(Operation):
     def backward_op_2(self, error_signal: np.array, operand_1, operand_2):
         return np.transose(operand_1.data_) @ error_signal
 
+
 class Sum(Operation):
 
-    def __init__(self, axis: int, keepdims=False):
+    def __init__(self, axis: Union[int, Tuple[int]], keepdims=False):
         super().__init__()
         self.axis = axis
         self.keepdims = keepdims
 
     def check_compatibility(self, operand_1, operand_2=None):
-        if not len(operand_1.data_.shape) > self.axis:
-            raise ValueError("TODO")
+        axis = self.axis
+        if not isinstance(self.axis, (list, tuple)):
+            axis = (self.axis,)
+        if not len(operand_1.data_.shape) > max(self.axis):
+                raise ValueError("TODO")
 
     def _forward(self, operand_1, operand_2):
         return np.sum(operand_1.data_, axis=self.axis, keepdims=self.keepdims)
@@ -89,6 +105,22 @@ class Sum(Operation):
         if not self.keepdims:
             error_signal = np.expand_dims(error_signal, self.axis)
         return error_signal * expansion_mask
+
+
+class TensorSub(Operation):
+
+    def __init__(self):
+        super().__init__()
+
+    def _forward(self, operand_1, operand_2=None):
+        return operand_1.data_ - operand_2.data_
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        return self.debroadcast(error_signal, operand_1.shape)
+
+    def backward_op_2(self, error_signal, operand_1, operand_2=None):
+        return self.debroadcast(-1 * error_signal, operand_2.shape)
+
 
 class Mean(Operation):
 
@@ -110,6 +142,7 @@ class Mean(Operation):
             error_signal = np.expand_dims(error_signal, self.axis)
         return error_signal * expansion_mask
 
+
 class Prod(Operation):
 
     def __init__(self, axis: int, keepdims=False):
@@ -127,6 +160,7 @@ class Prod(Operation):
             error_signal = np.expand_dims(error_signal, axis=self.axis)
         return error_signal * prop_factor
 
+
 class Square(Operation):
 
     def __init__(self):
@@ -137,6 +171,7 @@ class Square(Operation):
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return error_signal * 2 * operand_1.data_
+
 
 class Power(Operation):
 
@@ -154,6 +189,7 @@ class Power(Operation):
         gradient = np.exp(np.log(operand_1.data_) * operand_2.data_) * np.log(operand_1.data_)
         return self.debroadcast(gradient, operand_2.shape)
 
+
 class Sqrt(Operation):
 
     def __init__(self):
@@ -164,6 +200,7 @@ class Sqrt(Operation):
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return error_signal * 0.5 * np.power(operand_1.data_, -0.5)
+
 
 class Root(Operation):
 
@@ -183,6 +220,7 @@ class Root(Operation):
                    * np.log(operand_1.data_) * np.reciprocal(np.square(operand_2.data_))
         return self.debroadcast(gradient, operand_2.shape)
 
+
 class Transpose(Operation):
 
     def __init__(self, axis_permutation):
@@ -198,6 +236,7 @@ class Transpose(Operation):
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return np.transpose(error_signal, self.inverse_permutation)
+
 
 class TensorSum(Operation):
 
@@ -217,6 +256,7 @@ class TensorSum(Operation):
             return self.debroadcast(error_signal, operand_2.shape)
         return error_signal
 
+
 class TensorProduct(Operation):
 
     def __init__(self):
@@ -235,6 +275,7 @@ class TensorProduct(Operation):
         grad_factor = op1_data * error_signal
         return self.debroadcast(grad_factor, operand_2.shape)
 
+
 class Reshape(Operation):
 
     def __init__(self, new_shape):
@@ -246,6 +287,7 @@ class Reshape(Operation):
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return np.reshape(error_signal, operand_1.shape)
+
 
 class Slice(Operation):
 
@@ -260,6 +302,7 @@ class Slice(Operation):
         gradient = np.zeros(operand_1.shape)
         gradient[self.key] = error_signal
         return gradient
+
 
 class TensorDiv(Operation):
 
@@ -280,6 +323,7 @@ class TensorDiv(Operation):
         gradient = -grad_factor * np.reciprocal(np.square(operand_2.data_))
         return self.debroadcast(gradient, operand_2.shape)
 
+
 class Concatenate(Operation):
 
     def __init__(self, axis: int):
@@ -297,6 +341,7 @@ class Concatenate(Operation):
         sizes = np.array([operand.shape[self.axis] for operand in operand_1.tensors][:-1])
         split_points = np.cumsum(sizes)
         return np.split(error_signal, split_points, axis=self.axis)
+
 
 class Mix(Operation):
 
@@ -322,6 +367,7 @@ class Mix(Operation):
     def backward_op_2(self, error_signal, operand_1, operand_2=None):
         return error_signal[self.mix_positions]
 
+
 class Softmax(Operation):
 
     def __init__(self, axis: int):
@@ -340,6 +386,7 @@ class Softmax(Operation):
         softmax = op_exp / aggregated
         return error_signal * (softmax * (1 - softmax))
 
+
 class Squeeze(Operation):
 
     def __init__(self, axis: int):
@@ -351,6 +398,7 @@ class Squeeze(Operation):
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return np.expand_dims(error_signal, axis=self.axis)
+
 
 class Unsqueeze(Operation):
 
@@ -376,4 +424,60 @@ class Tile(Operation):
 
     def backward_op_1(self, error_signal, operand_1, operand_2=None):
         return self.debroadcast(error_signal, operand_1.shape)
+
+
+class Cumsum(Operation):
+
+    def __init__(self, axis: int = 0):
+        super().__init__()
+        self.axis = axis
+
+    def _forward(self, operand_1, operand_2=None):
+        return np.cumsum(operand_1.data_, axis=self.axis)
+
+    def _backward_op_1(self, error_signal, operand_1, operand_2=None):
+        error_signal_flipped = np.flip(error_signal, axis=self.axis)
+        error_cumsum = np.cumsum(error_signal_flipped, axis=self.axis)
+        error_signal = np.flip(error_cumsum)
+        return error_signal
+
+
+class Flip(Operation):
+
+    def __init__(self, axis: int = 0):
+        super().__init__()
+        self.axis = axis
+
+    def _forward(self, operand_1, operand_2=None):
+        return np.flip(operand_1.data_, axis=self.axis)
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        return np.flip(error_signal)
+
+
+class Dot(Operation):
+
+    def __init__(self):
+        super().__init__()
+
+    def check_compatibility(self, operand_1, operand_2=None):
+        if len(operand_1.shape) != 1:
+            raise ValueError(f'First operand tensor of operation dot does not exactly one dimension, but {operand_1.shape}')
+        if len(operand_2.shape) != 1:
+            raise ValueError(f'Second operand tensor of operation dot does not exactly one dimension, but {operand_2.shape}')
+        if operand_1.shape[0] != operand_2.shape[0]:
+            raise ValueError(f'Operation dot expects operand tensors to have equal shape. Got {operand_1.shape} and {operand_2.shape}')
+
+    def _forward(self, operand_1, operand_2=None):
+        return np.dot(operand_1, operand_2)
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        return error_signal * operand_2.data_
+
+    def backward_op_2(self, error_signal, operand_1, operand_2=None):
+        return error_signal * operand_1.data_
+
+
+
+
 
