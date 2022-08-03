@@ -52,6 +52,9 @@ class Operation(metaclass=ABCMeta):
         ...
         # TODO
 
+    def __call__(self, operand_1, operand_2):
+        return self.forward(operand_1, operand_2)
+
     @abstractmethod
     def _forward(self, operand_1, operand_2=None):
         ...
@@ -92,9 +95,9 @@ class Sum(Operation):
 
     def check_compatibility(self, operand_1, operand_2=None):
         axis = self.axis
-        if not isinstance(self.axis, (list, tuple)):
+        if not isinstance(axis, (list, tuple)):
             axis = (self.axis,)
-        if not len(operand_1.data_.shape) > max(self.axis):
+        if len(operand_1.data_.shape) <= max(axis):
                 raise ValueError("TODO")
 
     def _forward(self, operand_1, operand_2):
@@ -476,6 +479,58 @@ class Dot(Operation):
 
     def backward_op_2(self, error_signal, operand_1, operand_2=None):
         return error_signal * operand_1.data_
+
+
+class Roll(Operation):
+
+    def __init__(self, axis: int, shift: int, cyclic: bool = True, fill=0):
+        super().__init__()
+        self.axis = axis
+        self.cyclic = cyclic
+        self.fill = fill
+        self.shift = shift
+
+    def _forward(self, operand_1, operand_2=None):
+        data = np.roll(operand_1.data_, shift=self.shift, axis=self.axis)
+        if not self.cyclic:
+            if self.shift >= 0:
+                data[tuple([slice(None) for _ in range(self.axis)]
+                           + [slice(0, self.shift)]
+                           + [slice(None) for _ in range(self.axis + 1, len(operand_1.shape))])] = self.fill
+            else:
+                data[tuple([slice(None) for _ in range(self.axis)]
+                           + [slice(-self.shift, None)]
+                           + [slice(None) for _ in range(self.axis + 1, len(operand_1.shape))])] = self.fill
+        return data
+
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        rolled_error = np.roll(error_signal, shift=-self.shift, axis=self.axis)
+        if not self.cyclic:
+            if self.shift >= 0:
+                rolled_error[tuple([slice(None) for _ in range(self.axis)]
+                           + [slice(-self.shift, None)]
+                           + [slice(None) for _ in range(self.axis + 1, len(operand_1.shape))])] = 0
+            else:
+                rolled_error[tuple([slice(None) for _ in range(self.axis)]
+                           + [slice(0, -self.shift)]
+                           + [slice(None) for _ in range(self.axis + 1, len(operand_1.shape))])] = 0
+            return rolled_error
+
+
+class Flatten(Operation):
+
+    def __init__(self, start_axis: int):
+        super().__init__()
+        self.start_axis = start_axis
+
+    def _forward(self, operand_1, operand_2=None):
+        return np.reshape(operand_1.data_, newshape=operand_1.shape[:self.start_axis] + (-1,))
+
+    def backward_op_1(self, error_signal, operand_1, operand_2=None):
+        return np.reshape(error_signal, operand_1.shape)
+
+
 
 
 

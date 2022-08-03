@@ -86,3 +86,13 @@ def squeeze(tensor_1: Tensor, axis: int, name: str = None):
 def tile(tensor_1: Tensor, reps, name: str = None):
     operation = Tile(reps)
     return operation.forward(tensor_1), operation, name
+
+@unary_interface
+def roll(tensor_1: Tensor, shift: int, axis: int, cyclic: bool = True, fill=0, name: str = None):
+    operation = Roll(shift=shift, axis=axis, cyclic=cyclic)
+    return operation.forward(tensor_1), operation, name
+
+@unary_interface
+def flatten(tensor_1, start_axis: int, name: str = None):
+    operation = Flatten(start_axis)
+    return operation.forward(tensor_1), operation, name

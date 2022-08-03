@@ -220,9 +220,9 @@ class Tensor:
                 self.computation.backward(error_signal, **kwargs)
             else:  # atomic and gradient requiring tensor
                 # reshape into 1D stack of gradients
-                error_signal = np.reshape(error_signal, [-1] + list(self.grad.shape))
+                #error_signal = np.reshape(error_signal, [-1] + list(self.grad.shape))
                 # conflate by summation
-                error_signal = np.sum(error_signal, axis=0)
+                #error_signal = np.sum(error_signal, axis=0)
                 # update gradient
                 self.grad = self.grad + error_signal
 
@@ -268,11 +268,10 @@ class Tensor:
         self.grad = np.zeros_like(self.grad)
 
     def __repr__(self):
-        if self.computation is None:
-            print("asdfasdf")
         return f'{type(self).__name__}: {self.name} \n' \
                f'   dtype: {self.data_.dtype} \n' \
                f'   shape: {self.data_.shape} \n' \
+               f'   requires_grad: {self.requires_grad} \n' \
                f'   autograd: {self.computation.__repr__()} \n' \
                f'   data: {self.data_}'
 

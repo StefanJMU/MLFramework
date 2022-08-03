@@ -23,4 +23,6 @@ __all__ = ['Tensor',
            'softmax',
            'unsqueeze',
            'squeeze',
-           'tile']
+           'tile',
+           'flatten',
+           'roll']
